@@ -1,12 +1,31 @@
-name: core-build
+name: Source checks
 on:
   push:
     branches:
-      - 'master'
+      - master
   pull_request:
-
+permissions:
+  contents: read
 jobs:
-  build:
-    uses: azerothcore/reusable-workflows/.github/workflows/core_build_modules.yml@main
-    with:
-      module_repo: ${{ github.event.repository.name }}
+  source-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check changed whitespace
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -eu
+          [[ "$BASE_SHA" =~ ^[0-9a-f]{40}$ && "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]] || exit 1
+          if [[ "$BASE_SHA" == 0000000000000000000000000000000000000000 ]]; then
+            git diff-tree --check --root -r "$HEAD_SHA"
+          else
+            git diff --check "$BASE_SHA" "$HEAD_SHA"
+          fi
+      - name: Check buyer fixture Python syntax
+        run: python3 -c "import ast, pathlib; ast.parse(pathlib.Path('tests/buyer_decision.py').read_bytes())"

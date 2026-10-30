@@ -75,3 +75,8 @@ WOW_PROJECT_ROOT="/absolute/path/to/wow private server" python3 -B tests/buyer_d
 The test uses the project's build-host guard and compiles a temporary fixture
 under its `work/` directory. It exercises the buyer decision block with mock
 inputs; it does not test database transactions, mail, or realm behavior.
+
+GitHub Actions checks changed-file whitespace and Python fixture syntax only;
+it does not compile or run the regression. Before integrating changes, run the
+guarded regression above and the appropriate module build on the project's WSL2
+build host. The GitHub checks do not enforce or replace that build evidence.
