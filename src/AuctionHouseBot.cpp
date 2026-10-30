@@ -29,7 +29,9 @@
 #include "ItemTemplate.h"
 #include "SharedDefines.h"
 #include "SpellMgr.h"
+#include <algorithm>
 #include <cmath>
+#include <limits>
 
 #include <set>
 #include <unordered_map>
@@ -1725,13 +1727,21 @@ void AuctionHouseBot::AddNewAuctionBuyerBotBid(std::vector<Player*> AHBPlayers, 
         uint64 willingToSpendPerItemPrice = 0;
         uint64 discardBidPrice = 0;
         CalculateItemValue(prototype, discardBidPrice, willingToSpendPerItemPrice);
-        willingToSpendPerItemPrice = (uint64)((float)willingToSpendPerItemPrice * BuyingBotAcceptablePriceModifier);
-        uint64 willingToPayForStackPrice = willingToSpendPerItemPrice * pItem->GetCount();
+        if (!std::isfinite(BuyingBotAcceptablePriceModifier) || BuyingBotAcceptablePriceModifier < 0)
+            continue;
+        float adjustedPrice = static_cast<float>(willingToSpendPerItemPrice) * BuyingBotAcceptablePriceModifier;
+        uint64 const maxPrice = std::numeric_limits<uint64>::max();
+        willingToSpendPerItemPrice = !std::isfinite(adjustedPrice) || adjustedPrice >= static_cast<float>(maxPrice)
+            ? maxPrice : static_cast<uint64>(adjustedPrice);
+        uint64 willingToPayForStackPrice = willingToSpendPerItemPrice > maxPrice / pItem->GetCount()
+            ? maxPrice : willingToSpendPerItemPrice * pItem->GetCount();
 
         // Determine if it's a bid, buyout, or skip
         bool doBuyout = false;
         bool doBid = false;
         uint64 calcBidAmount = 0;
+        uint64 maximumBidAmount = std::min<uint64>(willingToPayForStackPrice, std::numeric_limits<uint32>::max());
+        uint64 minimumOutbidAmount = uint64(auction->bid) + auction->GetAuctionOutBid();
 
         if (auction->buyout != 0 && auction->buyout < willingToPayForStackPrice)
             doBuyout = true;
@@ -1741,32 +1751,32 @@ void AuctionHouseBot::AddNewAuctionBuyerBotBid(std::vector<Player*> AHBPlayers, 
             {
                 doBid = true;
                 if (BuyingBotAlwaysBidMaxCalculatedPrice == true)
-                    calcBidAmount = willingToPayForStackPrice;
+                    calcBidAmount = maximumBidAmount;
                 else
                     calcBidAmount = auction->startbid;
             }
-            else if (auction->bid != 0 && (auction->bid + auction->GetAuctionOutBid()) < willingToPayForStackPrice)
+            else if (auction->bid != 0 && minimumOutbidAmount <= maximumBidAmount && minimumOutbidAmount < willingToPayForStackPrice)
             {
                 doBid = true;
                 if (BuyingBotAlwaysBidMaxCalculatedPrice == true)
-                    calcBidAmount = willingToPayForStackPrice;
+                    calcBidAmount = maximumBidAmount;
                 else
-                    calcBidAmount = auction->bid + auction->GetAuctionOutBid();
+                    calcBidAmount = minimumOutbidAmount;
             }
         }
 
-        // Check that the item isn't listed above Vendor sell price. Out-of-range entries (items added after the
-        // price table was built) get UINT32_MAX, which behaves the same as "not sold by a vendor"
+        // Compare stack prices with the stack's vendor value; UINT32_MAX means no known vendor price.
         bool preventedOverpayingForVendorItem = false;
         uint32 vendorSellPrice = prototype->ItemId < vendorItemsPrices.size() ? vendorItemsPrices[prototype->ItemId] : UINT32_MAX;
-        if (PreventOverpayingForVendorItems && vendorSellPrice > 0)
+        if (PreventOverpayingForVendorItems && vendorSellPrice > 0 && vendorSellPrice != UINT32_MAX)
         {
-            if (doBuyout && auction->buyout > vendorSellPrice)
+            uint64 vendorStackSellPrice = uint64(vendorSellPrice) * pItem->GetCount();
+            if (doBuyout && auction->buyout > vendorStackSellPrice)
             {
                 doBuyout = false;
                 preventedOverpayingForVendorItem = true;
             }
-            if (doBid && calcBidAmount > vendorSellPrice)
+            if (doBid && calcBidAmount > vendorStackSellPrice)
             {
                 doBid = false;
                 preventedOverpayingForVendorItem = true;
