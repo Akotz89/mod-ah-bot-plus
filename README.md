@@ -62,3 +62,16 @@ The above behavior is replicated on each enabled auction house.  If left to defa
 - Zeb139: Lots of great enhancements, like enhanced pricing formulas and performance improvements (plus more)
 - Ayase: ported the bot to AzerothCore
 - Other contributors (check the contributors list)
+
+### Buyer decision regression
+
+From a regular-PC WSL2 WoW project checkout, run the focused native buyer
+regression with Python 3 and `clang++`:
+
+```bash
+WOW_PROJECT_ROOT="/absolute/path/to/wow private server" python3 -B tests/buyer_decision.py
+```
+
+The test uses the project's build-host guard and compiles a temporary fixture
+under its `work/` directory. It exercises the buyer decision block with mock
+inputs; it does not test database transactions, mail, or realm behavior.
